@@ -28,7 +28,10 @@ try
     builder.Services.AddAuthorization();
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(c =>
+    {
+        c.SwaggerDoc("v1", new() { Title = "PixelRun API", Version = "v1" });
+    });
 
     builder.Services.AddDbContext<GameDbContext>(opt =>
     {
@@ -57,9 +60,12 @@ try
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
-        app.UseSwaggerUI();
+        app.UseSwaggerUI(c =>
+        {
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "PixelRun API v1");
+        });
     }
-    
+
     app.UseCors("AllowAll");
     app.UseAuthentication();
     app.UseAuthorization();
