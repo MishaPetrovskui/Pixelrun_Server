@@ -46,6 +46,42 @@ namespace Pixelrun_Server.Services
             return player;
         }
 
+        public (bool ok, string error, Player? player) UpdateProfile(int playerId, UpdateProfileDTO dto)
+        {
+            var player = _db.Players.Find(playerId);
+            if (player == null) return (false, "Player not found", null);
+
+            if (!string.IsNullOrWhiteSpace(dto.Username))
+            {
+                if (dto.Username.Length < 3 || dto.Username.Length > 32)
+                    return (false, "Username must be 3–32 characters", null);
+                bool taken = _db.Players.Any(p => p.Username == dto.Username && p.Id != playerId);
+                if (taken) return (false, "Username already taken", null);
+                player.Username = dto.Username;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+            {
+                bool taken = _db.Players.Any(p => p.Email == dto.Email && p.Id != playerId);
+                if (taken) return (false, "Email already in use", null);
+                player.Email = dto.Email;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.NewPassword))
+            {
+                if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
+                    return (false, "Current password required to set a new one", null);
+                if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, player.PasswordHash))
+                    return (false, "Current password is incorrect", null);
+                if (dto.NewPassword.Length < 8)
+                    return (false, "New password must be at least 8 characters", null);
+                player.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            }
+
+            _db.SaveChanges();
+            return (true, "", player);
+        }
+
         public bool AddCoins(int playerId, int amount)
         {
             var player = _db.Players.Find(playerId);
@@ -73,9 +109,12 @@ namespace Pixelrun_Server.Services
         public List<LevelRecord> GetLeaderboard(int level, int top = 10)
             => _db.LevelRecords
                 .Where(r => r.Level == level)
+                .Include(r => r.Player)
+                .ToList()
+                .GroupBy(r => r.PlayerId)
+                .Select(g => g.OrderBy(r => r.Time).First())
                 .OrderBy(r => r.Time)
                 .Take(top)
-                .Include(r => r.Player)
                 .ToList();
 
         public LevelRecord? GetPlayerBest(int playerId, int level)
@@ -86,9 +125,19 @@ namespace Pixelrun_Server.Services
 
         public LevelRecord Submit(int playerId, LevelRecordDTO dto)
         {
-            var existing = GetPlayerBest(playerId, dto.Level);
-            if (existing != null && existing.Time <= dto.Time)
+            var existing = _db.LevelRecords
+                .FirstOrDefault(r => r.PlayerId == playerId && r.Level == dto.Level);
+
+            if (existing != null)
+            {
+                if (existing.Time <= dto.Time) return existing;
+                existing.Time = dto.Time;
+                existing.Coins = dto.Coins;
+                existing.Kills = dto.Kills;
+                existing.SetAt = DateTime.UtcNow;
+                _db.SaveChanges();
                 return existing;
+            }
 
             var record = new LevelRecord
             {

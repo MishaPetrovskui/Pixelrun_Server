@@ -77,6 +77,20 @@ namespace Pixelrun_Server.Controllers
             });
         }
 
+        [HttpPatch("me")]
+        public ActionResult UpdateProfile([FromBody] UpdateProfileDTO dto)
+        {
+            var (ok, error, player) = _players.UpdateProfile(GetPlayerId(), dto);
+            if (!ok) return BadRequest(new { error });
+            return Ok(new
+            {
+                player!.Id,
+                player.Username,
+                player.Email,
+                player.Coins
+            });
+        }
+
         [HttpPost("coins/add")]
         public ActionResult AddCoins([FromBody] CoinsDTO dto)
         {
@@ -210,15 +224,48 @@ namespace Pixelrun_Server.Controllers
     }
 
     [ApiController]
+    [Route("api/stats")]
+    public class StatsController : ControllerBase
+    {
+        private readonly GameDbContext _db;
+        public StatsController(GameDbContext db) => _db = db;
+
+        [HttpGet]
+        public ActionResult GetStats()
+        {
+            return Ok(new
+            {
+                totalPlayers = _db.Players.Count(),
+                totalRecords = _db.LevelRecords.Count(),
+                totalLevels = _db.LevelRecords.Select(r => r.Level).Distinct().Count()
+            });
+        }
+    }
+
+    [ApiController]
     [Route("api/admin")]
     public class AdminController : ControllerBase
     {
         private readonly GameDbContext _db;
-        public AdminController(GameDbContext db) => _db = db;
+        private readonly IConfiguration _config;
+
+        public AdminController(GameDbContext db, IConfiguration config)
+        {
+            _db = db;
+            _config = config;
+        }
+
+        private bool IsAdmin()
+        {
+            var key = Request.Headers["X-Admin-Key"].FirstOrDefault();
+            var expected = _config["AdminKey"];
+            return !string.IsNullOrEmpty(expected) && key == expected;
+        }
 
         [HttpGet("users")]
         public ActionResult GetUsers()
         {
+            if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
             var users = _db.Players
                 .Select(p => new {
                     p.Id,
@@ -245,6 +292,7 @@ namespace Pixelrun_Server.Controllers
         [HttpGet("users/{id}")]
         public ActionResult GetUser(int id)
         {
+            if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
             var p = _db.Players.Find(id);
             if (p == null) return NotFound(new { error = $"User {id} not found" });
             return Ok(new
@@ -270,6 +318,7 @@ namespace Pixelrun_Server.Controllers
         [HttpDelete("users/{id}")]
         public ActionResult DeleteUser(int id)
         {
+            if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
             var p = _db.Players.Find(id);
             if (p == null) return NotFound(new { error = $"User {id} not found" });
             _db.Players.Remove(p);
@@ -280,6 +329,7 @@ namespace Pixelrun_Server.Controllers
         [HttpPatch("users/{id}/coins")]
         public ActionResult SetCoins(int id, [FromBody] CoinsDTO dto)
         {
+            if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
             var p = _db.Players.Find(id);
             if (p == null) return NotFound(new { error = $"User {id} not found" });
             p.Coins = dto.Amount;
