@@ -337,4 +337,38 @@ namespace Pixelrun_Server.Controllers
             return Ok(new { p.Id, p.Username, p.Coins });
         }
     }
+
+    [ApiController]
+    [Route("api/lobby")]
+    public class LobbyController : ControllerBase
+    {
+        private static readonly string[] LevelNames = { "", "Forest Run", "Dark Caves", "Sky Fortress" };
+        private static readonly string[] LevelDescs = {
+            "",
+            "Beginner friendly. Forests, basic enemies, open paths.",
+            "Underground caves with spike traps and tougher enemies.",
+            "High altitude fortress — hardest level, best records."
+        };
+
+        [HttpGet("rooms")]
+        public ActionResult GetRooms()
+        {
+            var counts = MultiplayerHub.GetLevelCounts();
+            var players = MultiplayerHub.GetOnlinePlayers();
+
+            var rooms = Enumerable.Range(1, 3).Select(lvl => new
+            {
+                id = lvl,
+                level = lvl,
+                name = LevelNames[lvl],
+                desc = LevelDescs[lvl],
+                online = counts.TryGetValue(lvl, out int c) ? c : 0,
+                players = players
+                    .Where(p => p.Level == lvl)
+                    .Select(p => new { p.Id, p.Username, p.Anim, p.FacingRight })
+                    .ToList()
+            });
+            return Ok(rooms);
+        }
+    }
 }

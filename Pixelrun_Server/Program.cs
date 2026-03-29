@@ -29,9 +29,7 @@ try
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
-    {
-        c.SwaggerDoc("v1", new() { Title = "PixelRun API", Version = "v1" });
-    });
+        c.SwaggerDoc("v1", new() { Title = "PixelRun API", Version = "v1" }));
 
     builder.Services.AddDbContext<GameDbContext>(opt =>
     {
@@ -45,9 +43,11 @@ try
     builder.Services.AddScoped<ShopService>();
     builder.Services.AddScoped<QuestService>();
 
+    // MultiplayerHub is Singleton because it holds the static player map
+    builder.Services.AddSingleton<MultiplayerHub>();
+
     builder.Services.AddCors(opt =>
-        opt.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader())
-    );
+        opt.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
     var app = builder.Build();
 
@@ -61,12 +61,29 @@ try
     {
         app.UseSwagger();
         app.UseSwaggerUI(c =>
-        {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "PixelRun API v1");
-        });
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "PixelRun API v1"));
     }
 
     app.UseCors("AllowAll");
+
+    // ── WebSocket middleware ──────────────────────────────────────────────────
+    app.UseWebSockets(new WebSocketOptions
+    {
+        KeepAliveInterval = TimeSpan.FromSeconds(30)
+    });
+
+    app.Map("/ws/game", async (HttpContext ctx, MultiplayerHub hub) =>
+    {
+        if (!ctx.WebSockets.IsWebSocketRequest)
+        {
+            ctx.Response.StatusCode = 400;
+            return;
+        }
+        var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+        await hub.HandleAsync(ctx, ws);
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
@@ -75,7 +92,7 @@ try
 catch (Exception ex)
 {
     var logPath = Path.Combine(AppContext.BaseDirectory, "startup_error.log");
-    File.WriteAllText(logPath, $"[{DateTime.Now}] FATAL ERROR:\n{ex}\n\nInner: {ex.InnerException}");
+    File.WriteAllText(logPath, $"[{DateTime.Now}] FATAL:\n{ex}\n\nInner: {ex.InnerException}");
     Console.WriteLine($"FATAL: {ex}");
     Console.ReadKey();
     throw;
