@@ -15,6 +15,7 @@ namespace Pixelrun_Server.Models
         public string EquippedPlayerSkin { get; set; } = "default";
         public string EquippedBarSkin { get; set; } = "default";
         public string EquippedSlashSkin { get; set; } = "default";
+        public bool IsAdmin { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -58,7 +59,7 @@ namespace Pixelrun_Server.Models
     public class LevelRecordDTO
     {
         public int Level { get; set; }
-        public float Time  { get; set; }
+        public float Time { get; set; }
         public int Coins { get; set; }
         public int Kills { get; set; }
     }
@@ -107,7 +108,7 @@ namespace Pixelrun_Server.Models
         public string QuestId { get; set; } = "";
         public int CurrentValue { get; set; } = 0;
         public bool Completed { get; set; } = false;
-        public bool Claimed  { get; set; } = false;
+        public bool Claimed { get; set; } = false;
 
         [ForeignKey("PlayerId")]
         public Player? Player { get; set; }
@@ -129,5 +130,10 @@ namespace Pixelrun_Server.Models
     public class CoinsDTO
     {
         public int Amount { get; set; }
+    }
+
+    public class SetAdminDTO
+    {
+        public bool IsAdmin { get; set; }
     }
 }

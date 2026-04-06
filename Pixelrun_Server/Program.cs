@@ -55,6 +55,20 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
         db.Database.EnsureCreated();
+
+        // Safely add any missing columns (SQLite doesn't support auto-migrations)
+        var alterCmds = new[]
+        {
+            "ALTER TABLE Players ADD COLUMN IsAdmin INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE Players ADD COLUMN EquippedPlayerSkin TEXT NOT NULL DEFAULT 'default'",
+            "ALTER TABLE Players ADD COLUMN EquippedBarSkin TEXT NOT NULL DEFAULT 'bar_default'",
+            "ALTER TABLE Players ADD COLUMN EquippedSlashSkin TEXT NOT NULL DEFAULT 'slash_default'",
+        };
+        foreach (var cmd in alterCmds)
+        {
+            try { db.Database.ExecuteSqlRaw(cmd); }
+            catch { /* column already exists */ }
+        }
     }
 
     if (app.Environment.IsDevelopment())

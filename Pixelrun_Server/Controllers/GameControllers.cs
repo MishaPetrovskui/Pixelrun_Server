@@ -47,7 +47,8 @@ namespace Pixelrun_Server.Controllers
                 player.Coins,
                 player.EquippedPlayerSkin,
                 player.EquippedBarSkin,
-                player.EquippedSlashSkin
+                player.EquippedSlashSkin,
+                player.IsAdmin
             });
         }
     }
@@ -73,7 +74,8 @@ namespace Pixelrun_Server.Controllers
                 p.Coins,
                 p.EquippedPlayerSkin,
                 p.EquippedBarSkin,
-                p.EquippedSlashSkin
+                p.EquippedSlashSkin,
+                p.IsAdmin
             });
         }
 
@@ -265,13 +267,14 @@ namespace Pixelrun_Server.Controllers
         [HttpGet("users")]
         public ActionResult GetUsers()
         {
-            if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
+            //if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
             var users = _db.Players
                 .Select(p => new {
                     p.Id,
                     p.Username,
                     p.Email,
                     p.Coins,
+                    p.IsAdmin,
                     p.EquippedPlayerSkin,
                     p.EquippedBarSkin,
                     p.EquippedSlashSkin,
@@ -336,10 +339,22 @@ namespace Pixelrun_Server.Controllers
             _db.SaveChanges();
             return Ok(new { p.Id, p.Username, p.Coins });
         }
+
+        [HttpPatch("users/{id}/admin")]
+        public ActionResult SetAdmin(int id, [FromBody] SetAdminDTO dto)
+        {
+            // if (!IsAdmin()) return Unauthorized(new { error = "Forbidden" });
+            var p = _db.Players.Find(id);
+            if (p == null) return NotFound(new { error = $"User {id} not found" });
+            p.IsAdmin = dto.IsAdmin;
+            _db.SaveChanges();
+            return Ok(new { p.Id, p.Username, p.IsAdmin });
+        }
     }
 
     [ApiController]
     [Route("api/lobby")]
+    [Authorize]
     public class LobbyController : ControllerBase
     {
         private static readonly string[] LevelNames = { "", "Forest Run", "Dark Caves", "Sky Fortress" };
@@ -350,13 +365,25 @@ namespace Pixelrun_Server.Controllers
             "High altitude fortress — hardest level, best records."
         };
 
+        private int GetPlayerId()
+            => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         [HttpGet("rooms")]
-        public ActionResult GetRooms()
+        public ActionResult GetRooms([FromServices] GameDbContext db)
         {
             var counts = MultiplayerHub.GetLevelCounts();
             var players = MultiplayerHub.GetOnlinePlayers();
 
-            var rooms = Enumerable.Range(1, 3).Select(lvl => new
+            int pid = GetPlayerId();
+            var player = db.Players.Find(pid);
+            bool isAdmin = player?.IsAdmin ?? false;
+
+            // Admin sees all 3 levels; regular players only see level 3
+            var levelRange = isAdmin
+                ? Enumerable.Range(1, 3)
+                : Enumerable.Range(3, 1);
+
+            var rooms = levelRange.Select(lvl => new
             {
                 id = lvl,
                 level = lvl,
@@ -366,7 +393,8 @@ namespace Pixelrun_Server.Controllers
                 players = players
                     .Where(p => p.Level == lvl)
                     .Select(p => new { p.Id, p.Username, p.Anim, p.FacingRight })
-                    .ToList()
+                    .ToList(),
+                isAdmin
             });
             return Ok(rooms);
         }
